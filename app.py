@@ -61,7 +61,6 @@ if menu == "📊 Visão Executiva & KPIs":
     st.title("📊 Painel Executivo - Supply Chain")
     st.markdown("Indicadores consolidados de inventário, rupturas e nível de serviço logístico.")
     
-    # Cálculos Avançados
     df_est['Valor_Total_Item'] = df_est['Qtd_Atual'] * df_est['Custo_Unit']
     valor_total_estoque = df_est['Valor_Total_Item'].sum()
     rupturas = len(df_est[df_est['Qtd_Atual'] <= df_est['Estoque_Min']])
@@ -72,7 +71,6 @@ if menu == "📊 Visão Executiva & KPIs":
     otd_perc = (no_prazo / total_ent * 100) if total_ent > 0 else 0
     custo_frete_total = df_ent['Frete'].sum()
 
-    # Cards de Métricas
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Valor em Estoque", f"R$ {valor_total_estoque:,.2f}")
@@ -134,7 +132,6 @@ elif menu == "🔄 Entradas e Saídas":
     st.subheader("Histórico de Movimentações")
     st.dataframe(st.session_state['movimentos'], use_container_width=True)
     
-    # Botão de Exportação
     csv = st.session_state['movimentos'].to_csv(index=False).encode('utf-8')
     st.download_button("📥 Baixar Histórico (CSV)", csv, "movimentos_estoque.csv", "text/csv")
 
@@ -177,4 +174,44 @@ elif menu == "🚚 Monitor de Entregas (OTD)":
 # 4. CADASTRO & CURVA ABC
 # ----------------------------------------------------
 elif menu == "📦 Cadastro & Curva ABC":
-    st.title("📦 Cadastro de SK
+    st.title("📦 Cadastro de SKUs & Curva ABC Automática")
+    
+    with st.expander("➕ Cadastrar Novo Produto"):
+        with st.form("form_prod", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                sku = st.text_input("Código SKU", "SKU-005")
+                nome = st.text_input("Nome do Produto", "Descrição")
+                cat = st.text_input("Categoria", "Matéria-Prima")
+            with c2:
+                min_est = st.number_input("Estoque Mínimo", min_value=0, value=30)
+                custo = st.number_input("Custo Unitário (R$)", min_value=0.0, value=50.0)
+                qtd_inicial = st.number_input("Saldo Inicial", min_value=0, value=200)
+                
+            btn_prod = st.form_submit_button("Cadastrar Produto")
+            if btn_prod:
+                novo_p = pd.DataFrame([{
+                    "SKU": sku, "Produto": nome, "Categoria": cat, 
+                    "Estoque_Min": min_est, "Custo_Unit": custo, "Qtd_Atual": qtd_inicial
+                }])
+                st.session_state['estoque'] = pd.concat([df_est, novo_p], ignore_index=True)
+                st.success(f"Produto {sku} cadastrado com sucesso!")
+
+    st.subheader("Classificação de Inventário")
+    
+    df_abc = df_est.copy()
+    df_abc['Valor_Total'] = df_abc['Qtd_Atual'] * df_abc['Custo_Unit']
+    df_abc = df_abc.sort_values(by='Valor_Total', ascending=False)
+    
+    total_geral = df_abc['Valor_Total'].sum()
+    if total_geral > 0:
+        df_abc['Acumulado_%'] = (df_abc['Valor_Total'].cumsum() / total_geral) * 100
+        def class_abc(val):
+            if val <= 80: return "Classe A"
+            elif val <= 95: return "Classe B"
+            else: return "Classe C"
+        df_abc['Curva_ABC'] = df_abc['Acumulado_%'].apply(class_abc)
+    else:
+        df_abc['Curva_ABC'] = "Classe C"
+
+    st.dataframe(df_abc[['SKU', 'Produto', 'Categoria', 'Qtd_Atual', 'Custo_Unit', 'Valor_Total', 'Curva_ABC']], use_container_width=True)
